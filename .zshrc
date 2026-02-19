@@ -86,6 +86,51 @@ kwait() {
 every() { while true; do eval "${@:2}"; sleep "$1"; done }
 
 alias colourise="python /Users/tlynch/prog/colourise/colourise.py"
+
+# Lighten/darken VS Code workspace colors
+# Usage: lighten [-r to revert]
+lighten() {
+  local settings=".vscode/settings.json"
+  local stash=".vscode/.lighten-orig"
+  if [ ! -f "$settings" ]; then
+    echo "No .vscode/settings.json found in current directory"
+    return 1
+  fi
+  if [[ "$1" == "-r" ]]; then
+    if [ ! -f "$stash" ]; then
+      echo "No saved color to revert to (run lighten first)"
+      return 1
+    fi
+    local orig=$(cat "$stash")
+    sed -i '' \
+      -e 's/\("activityBar.background"[[:space:]]*:[[:space:]]*"\)#[0-9a-fA-F]\{6\}"/\1'"$orig"'"/' \
+      -e 's/\("titleBar.activeBackground"[[:space:]]*:[[:space:]]*"\)#[0-9a-fA-F]\{6\}"/\1'"$orig"'"/' \
+      -e 's/\("titleBar.inactiveBackground"[[:space:]]*:[[:space:]]*"\)#[0-9a-fA-F]\{6\}"/\1'"$orig"'"/' \
+      "$settings"
+    local cur=$(grep -o '"activityBar.background"[[:space:]]*:[[:space:]]*"#[0-9a-fA-F]\{6\}"' "$settings" 2>/dev/null | grep -o '#[0-9a-fA-F]\{6\}' | head -1)
+    rm "$stash"
+    echo "$cur → $orig (reverted)"
+    return 0
+  fi
+  local hex=$(grep -o '"activityBar.background"[[:space:]]*:[[:space:]]*"#[0-9a-fA-F]\{6\}"' "$settings" 2>/dev/null | grep -o '#[0-9a-fA-F]\{6\}' | head -1)
+  if [ -z "$hex" ]; then
+    echo "No activityBar.background color found in $settings"
+    return 1
+  fi
+  echo "$hex" > "$stash"
+  local r=$((16#${hex:1:2})) g=$((16#${hex:3:2})) b=$((16#${hex:5:2}))
+  r=$(( r + (255 - r) * 25 / 100 ))
+  g=$(( g + (255 - g) * 25 / 100 ))
+  b=$(( b + (255 - b) * 25 / 100 ))
+  local new=$(printf "#%02x%02x%02x" $r $g $b)
+  sed -i '' \
+    -e 's/\("activityBar.background"[[:space:]]*:[[:space:]]*"\)#[0-9a-fA-F]\{6\}"/\1'"$new"'"/' \
+    -e 's/\("titleBar.activeBackground"[[:space:]]*:[[:space:]]*"\)#[0-9a-fA-F]\{6\}"/\1'"$new"'"/' \
+    -e 's/\("titleBar.inactiveBackground"[[:space:]]*:[[:space:]]*"\)#[0-9a-fA-F]\{6\}"/\1'"$new"'"/' \
+    "$settings"
+  echo "$hex → $new"
+}
+alias lighter=lighten
 export EDITOR="nano"
 
 export PATH="$HOME/.local/bin:$PATH"
