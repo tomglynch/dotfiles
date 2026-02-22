@@ -1,6 +1,10 @@
 #  Prompt # blue / orange - pink 
 PROMPT='%B%(?.%F{039}√.%F{208}?%?)%f%b %B%F{199}%3~%f%b %# '
 
+# Dotfiles auto-sync: fetch remote changes in background
+if [[ -d "$HOME/dotfiles/.git" && -o interactive ]]; then
+  (git -C "$HOME/dotfiles" fetch --quiet 2>/dev/null &)
+fi
 
 #General
 alias python2="\python"
@@ -13,7 +17,7 @@ alias gl="glogin"
 
 alias zshrc="micro ~/.zshrc"
 alias zv="code ~/.zshrc"
-alias rzshrc="source ~/.zshrc && echo '>> .zshrc updated'"
+alias rzshrc="dotfiles_sync"
 alias z=zshrc
 alias rz=rzshrc
 alias zr=rzshrc
@@ -133,6 +137,7 @@ lighten() {
 alias lighter=lighten
 export EDITOR="nano"
 
+export PATH="/usr/local/opt/libpq/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 
 export NVM_DIR="$HOME/.nvm"
@@ -163,4 +168,36 @@ wt() {
       cd "${matches[$choice]}"
     fi
   fi
+}
+
+# Dotfiles auto-sync: commit, rebase, push after sourcing
+dotfiles_sync() {
+  # Source first — instant feedback
+  source ~/.zshrc && echo ">> .zshrc updated"
+
+  # Git sync in background subshell
+  (
+    local repo="$HOME/dotfiles"
+
+    # Commit local changes if any
+    if ! git -C "$repo" diff --quiet 2>/dev/null || \
+       ! git -C "$repo" diff --cached --quiet 2>/dev/null; then
+      git -C "$repo" add -A
+      git -C "$repo" commit -m "update dotfiles from $(hostname -s)" --quiet
+      # Fetch before pushing (background fetch may not have run yet)
+      git -C "$repo" fetch --quiet 2>/dev/null
+    fi
+
+    # Rebase onto remote if they differ (uses already-fetched data)
+    local local_head=$(git -C "$repo" rev-parse HEAD 2>/dev/null)
+    local remote_head=$(git -C "$repo" rev-parse origin/main 2>/dev/null)
+    if [[ -n "$remote_head" && "$local_head" != "$remote_head" ]]; then
+      if ! git -C "$repo" rebase origin/main --quiet 2>/dev/null; then
+        git -C "$repo" rebase --abort 2>/dev/null
+        echo ">> dotfiles: CONFLICT — cd ~/dotfiles && git rebase origin/main"
+        return 1
+      fi
+      git -C "$repo" push --quiet 2>/dev/null
+    fi
+  ) &
 }
