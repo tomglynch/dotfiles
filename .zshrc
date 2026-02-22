@@ -199,5 +199,5 @@ dotfiles_sync() {
       fi
       git -C "$repo" push --quiet 2>/dev/null
     fi
-  ) &
+  ) &!
 }
