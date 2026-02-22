@@ -6,6 +6,8 @@ if [[ -d "$HOME/dotfiles/.git" && -o interactive ]]; then
   (git -C "$HOME/dotfiles" fetch --quiet 2>/dev/null &)
 fi
 
+alias c="claude"
+
 #General
 alias python2="\python"
 alias python="python3"
