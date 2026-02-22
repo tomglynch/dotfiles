@@ -91,7 +91,7 @@ kwait() {
 # Usage: every 5 echo "hello"
 every() { while true; do eval "${@:2}"; sleep "$1"; done }
 
-alias colourise="python /Users/tlynch/prog/colourise/colourise.py"
+alias colourise="python ~/prog/colourise/colourise.py"
 
 # Lighten/darken VS Code workspace colors
 # Usage: lighten [-r to revert]
@@ -203,3 +203,6 @@ dotfiles_sync() {
     fi
   ) &!
 }
+
+# Added by Antigravity
+export PATH="/Users/tomlynchdj/.antigravity/antigravity/bin:$PATH"
