@@ -49,6 +49,7 @@ alias v="code"
 alias zed="open -a /Applications/Zed.app ./"
 alias s="open -a /Applications/Sourcetree.app ./"
 alias t='open -a Terminal ./'  
+unalias dcu 2>/dev/null
 dcu() {
   printf '\033]11;rgb:00/3f/8a\a'  # Docker blue background
   docker compose up "$@"
