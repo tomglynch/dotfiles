@@ -49,7 +49,11 @@ alias v="code"
 alias zed="open -a /Applications/Zed.app ./"
 alias s="open -a /Applications/Sourcetree.app ./"
 alias t='open -a Terminal ./'  
-alias dcu="docker compose up"
+dcu() {
+  printf '\033]11;rgb:00/3f/8a\a'  # Docker blue background
+  docker compose up "$@"
+  printf '\033]111;\a'              # Restore default background
+}
 alias dcd="docker compose down"
 alias up="docker compose run --rm client pnpm install && docker compose up"
 
@@ -170,6 +174,28 @@ wt() {
       cd "${matches[$choice]}"
     fi
   fi
+}
+
+wtt() {
+  local target
+  if [ -z "$1" ]; then
+    echo "Usage: wtt <worktree-name>"
+    echo "Worktrees:"; ls ~/worktrees-qz/toocan-app
+    return 1
+  fi
+  local matches=("${(@f)$(find ~/worktrees-qz/toocan-app -maxdepth 1 -type d -name "*$1*")}")
+  if [ ${#matches[@]} -eq 0 ]; then
+    echo "No worktree matching '$1'"; return 1
+  elif [ ${#matches[@]} -eq 1 ]; then
+    target="${matches[1]}"
+  else
+    echo "Multiple matches:"
+    local i=1
+    for m in "${matches[@]}"; do echo "  $i) ${m##*/}"; ((i++)); done
+    echo -n "Pick [1-${#matches[@]}]: "; read choice
+    target="${matches[$choice]}"
+  fi
+  ~/.claude/skills/worktree-manager/scripts/launch-agent.sh "$target"
 }
 
 # Dotfiles auto-sync: commit, rebase, push after sourcing
