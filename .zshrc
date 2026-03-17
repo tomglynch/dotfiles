@@ -48,7 +48,7 @@ alias f='open -a Finder ./'
 alias v="code"
 alias zed="open -a /Applications/Zed.app ./"
 alias s="open -a /Applications/Sourcetree.app ./"
-alias t='open -a Terminal ./'  
+alias t='open -a iTerm ./'
 unalias dcu 2>/dev/null
 dcu() {
   printf '\033]11;rgb:00/3f/8a\a'  # Docker blue background
@@ -60,6 +60,7 @@ alias up="docker compose run --rm client pnpm install && docker compose up"
 
 alias tc="cd ~/qz/toocan-app"
 alias tccc="cd ~/qz/toocan-app && cc"
+alias k8s="cd ~/qz/k8s-apps"
 alias qz="cd ~/qz && ls"
 alias qzcc="cd ~/qz && cc"
 alias k="kubectl"
@@ -148,8 +149,19 @@ export PATH="/usr/local/opt/libpq/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 
 export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+# Eagerly add default node to PATH so node/npx work in non-interactive shells (git hooks, worktrees)
+for _d in "$NVM_DIR"/versions/node/v"$(cat "$NVM_DIR/alias/default" 2>/dev/null)"*/bin; do
+  [ -d "$_d" ] && export PATH="$_d:$PATH" && break
+done
+unset _d
+lazy_load_nvm() {
+  unset -f node npm npx pnpm nvm
+  [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+  [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+}
+for cmd in node npm npx pnpm nvm; do
+  eval "${cmd}() { lazy_load_nvm; ${cmd} \"\$@\" }"
+done
 
 # The next line updates PATH for the Google Cloud SDK.
 if [ -f '/Users/tlynch/Downloads/google-cloud-sdk/path.zsh.inc' ]; then . '/Users/tlynch/Downloads/google-cloud-sdk/path.zsh.inc'; fi

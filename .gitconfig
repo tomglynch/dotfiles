@@ -1,2 +1,7 @@
+[user]
+	name = Tom Lynch
+	email = tlynch@quarterzip.ai
 [push]
 	autoSetupRemote = true
+[includeIf "gitdir:~/prog/"]
+	path = ~/.gitconfig-prog
