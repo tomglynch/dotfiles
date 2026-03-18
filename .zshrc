@@ -34,6 +34,7 @@ cc() {
 }
 alias ccr="~/.claude/scripts/ccr.sh"
 alias gs="git status"
+alias gco="git checkout"
 alias gc="git commit"
 alias gca="git commit --amend --no-edit"
 alias gp="git push"
@@ -51,6 +52,12 @@ alias s="open -a /Applications/Sourcetree.app ./"
 alias t='open -a iTerm ./'
 unalias dcu 2>/dev/null
 dcu() {
+  if ! docker info &>/dev/null; then
+    echo "Starting Docker Desktop..."
+    open -a Docker
+    while ! docker info &>/dev/null; do sleep 1; done
+    echo "Docker is ready."
+  fi
   printf '\033]11;rgb:00/3f/8a\a'  # Docker blue background
   docker compose up "$@"
   printf '\033]111;\a'              # Restore default background
