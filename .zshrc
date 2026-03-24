@@ -103,7 +103,7 @@ kwait() {
 }
 
 # Usage: every 5 echo "hello"
-every() { while true; do eval noglob "${@:2}"; sleep "$1"; done }
+every() { while true; do setopt localoptions noglob; eval "${@:2}"; sleep "$1"; done }
 
 alias e5="every 5"
 alias e10="every 10"
