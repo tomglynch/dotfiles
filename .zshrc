@@ -54,7 +54,7 @@ unalias dcu 2>/dev/null
 dcu() {
   if ! docker info &>/dev/null; then
     echo "Starting Docker Desktop..."
-    open -a Docker
+    open -gja Docker
     while ! docker info &>/dev/null; do sleep 1; done
     echo "Docker is ready."
   fi
@@ -103,7 +103,11 @@ kwait() {
 }
 
 # Usage: every 5 echo "hello"
-every() { while true; do eval "${@:2}"; sleep "$1"; done }
+every() { while true; do eval noglob "${@:2}"; sleep "$1"; done }
+
+alias e5="every 5"
+alias e10="every 10"
+alias e15="every 15"
 
 alias colourise="python ~/prog/colourise/colourise.py"
 
