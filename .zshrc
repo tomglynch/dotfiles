@@ -1,4 +1,6 @@
-#  Prompt # blue / orange - pink 
+export PATH="$HOME/bin:$PATH"
+
+#  Prompt # blue / orange - pink
 PROMPT='%B%(?.%F{039}√.%F{208}?%?)%f%b %B%F{199}%3~%f%b %# '
 
 # Dotfiles auto-sync: fetch remote changes in background
