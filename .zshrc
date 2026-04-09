@@ -16,7 +16,16 @@ alias python="python3"
 alias pip="pip3"
 
 alias lctl="launchctl"
-alias glogin="gcloud auth application-default login && gcloud auth application-default set-quota-project toocan-dev"
+_SESSION_CMD_COUNT=0
+_session_cmd_counter() { (( _SESSION_CMD_COUNT++ )) }
+preexec_functions+=(_session_cmd_counter)
+
+glogin() {
+  gcloud auth application-default login && gcloud auth application-default set-quota-project toocan-dev
+  if [[ $_SESSION_CMD_COUNT -le 1 ]]; then
+    exit
+  fi
+}
 alias gl="glogin"
 
 alias zshrc="micro ~/.zshrc"
@@ -105,7 +114,7 @@ kwait() {
 }
 
 # Usage: every 5 echo "hello"
-every() { while true; do setopt localoptions noglob; eval "${@:2}"; sleep "$1"; done }
+every() { while true; do date; setopt localoptions noglob; eval "${@:2}"; sleep "$1"; done }
 
 alias e5="every 5"
 alias e10="every 10"
@@ -186,7 +195,7 @@ if [ -f '/Users/tlynch/Downloads/google-cloud-sdk/completion.zsh.inc' ]; then . 
 # Functions
 wt() {
   if [ -z "$1" ]; then
-    cd ~/worktrees-qz/toocan-app && ls
+    cd ~/worktrees-qz/toocan-app && ls -t
   else
     local matches=("${(@f)$(find ~/worktrees-qz/toocan-app -maxdepth 1 -type d -name "*$1*")}")
     if [ ${#matches[@]} -eq 0 ]; then
