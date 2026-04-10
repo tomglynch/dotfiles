@@ -48,7 +48,15 @@ alias gs="git status"
 alias gco="git checkout"
 alias gc="git commit"
 alias gca="git commit --amend --no-edit"
-alias gp="git push"
+function gp() {
+  echo "git (pu)ll or git (pu)sh? [l/s]: \c"
+  read choice
+  case "$choice" in
+    l) git pull "$@" ;;
+    s) git push "$@" ;;
+    *) echo "Cancelled." ;;
+  esac
+}
 alias gspp="git stash && git pull && git stash pop"
 
 alias pnnn="pbpaste | tr '\n' ' ' | pbcopy"
@@ -83,7 +91,6 @@ alias k8="cd ~/qz/k8s-apps"
 alias qz="cd ~/qz && ls"
 alias qzcc="cd ~/qz && cc"
 alias k="kubectl"
-alias kubectl="date && kubectl"
 alias kctx="kubectx"
 alias kc="kubectx"
 alias kcs="kubectx staging"
@@ -166,6 +173,10 @@ lighten() {
   echo "$hex → $new"
 }
 alias lighter=lighten
+
+# Source secrets (API tokens etc.) — not tracked in dotfiles
+[[ -f ~/.secrets ]] && source ~/.secrets
+
 export EDITOR="nano"
 
 export PATH="/usr/local/opt/libpq/bin:$PATH"

@@ -5,3 +5,5 @@
 	autoSetupRemote = true
 [includeIf "gitdir:~/prog/"]
 	path = ~/.gitconfig-prog
+[core]
+	excludesFile = /Users/tlynch/.gitignore_global
