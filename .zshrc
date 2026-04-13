@@ -57,6 +57,10 @@ function gp() {
     *) echo "Cancelled." ;;
   esac
 }
+alias gpll="git pull"
+alias gpl="git pull"
+alias gpsh="git push"
+alias gps="git push"
 alias gspp="git stash && git pull && git stash pop"
 
 alias pnnn="pbpaste | tr '\n' ' ' | pbcopy"
