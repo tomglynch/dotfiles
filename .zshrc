@@ -98,9 +98,6 @@ dcus() {
 }
 alias dcd="docker compose down"
 alias up="docker compose run --rm client pnpm install && docker compose up"
-dcus() {
-  dcu --profile sdk-test "$@"
-}
 
 alias tc="cd ~/qz/toocan-app"
 alias tccc="cd ~/qz/toocan-app && cc"
