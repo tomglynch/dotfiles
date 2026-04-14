@@ -74,16 +74,27 @@ alias zed="open -a /Applications/Zed.app ./"
 alias s="open -a /Applications/Sourcetree.app ./"
 alias t='open -a iTerm ./'
 unalias dcu 2>/dev/null
-dcu() {
+_ensure_docker() {
   if ! docker info &>/dev/null; then
     echo "Starting Docker Desktop..."
     open -gja Docker
     while ! docker info &>/dev/null; do sleep 1; done
     echo "Docker is ready."
   fi
+}
+
+dcu() {
+  _ensure_docker
   printf '\033]11;rgb:00/3f/8a\a'  # Docker blue background
   docker compose up "$@"
   printf '\033]111;\a'              # Restore default background
+}
+
+dcus() {
+  _ensure_docker
+  printf '\033]11;rgb:00/3f/8a\a'
+  docker compose --profile sdk-test up "$@"
+  printf '\033]111;\a'
 }
 alias dcd="docker compose down"
 alias up="docker compose run --rm client pnpm install && docker compose up"
