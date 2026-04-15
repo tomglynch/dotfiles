@@ -138,6 +138,8 @@ kwait() {
 # Usage: every 5 echo "hello"
 every() { while true; do date >&2; setopt localoptions noglob; eval "${@:2}"; sleep "$1"; done }
 
+alias e1="every 1"
+alias e2="every 2"
 alias e5="every 5"
 alias e10="every 10"
 alias e15="every 15"
