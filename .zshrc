@@ -294,5 +294,12 @@ dotfiles_sync() {
   ) &!
 }
 
+# Keep Mac awake for N minutes: `caf 60` = 1 hour, `caf 20` = 20 minutes
+caf() {
+  local mins=${1:?usage: caf <minutes>}
+  echo "caffeinating for ${mins}m..."
+  caffeinate -dimsu -t $((mins * 60))
+}
+
 # Added by Antigravity
 export PATH="/Users/tomlynchdj/.antigravity/antigravity/bin:$PATH"
