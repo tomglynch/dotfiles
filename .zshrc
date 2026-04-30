@@ -31,7 +31,7 @@ alias gl="glogin"
 alias zshrc="micro ~/.zshrc"
 alias zv="code ~/.zshrc"
 alias rzshrc="dotfiles_sync"
-alias z=zshrc
+z() { if [ $# -eq 0 ]; then zshrc; else open -a /Applications/Zed.app "$@"; fi }
 alias rz=rzshrc
 alias zr=rzshrc
 cc() {
