@@ -303,3 +303,11 @@ caf() {
 
 # Added by Antigravity
 export PATH="/Users/tomlynchdj/.antigravity/antigravity/bin:$PATH"
+
+# pnpm
+export PNPM_HOME="/Users/tlynch/Library/pnpm"
+case ":$PATH:" in
+  *":$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME:$PATH" ;;
+esac
+# pnpm end
