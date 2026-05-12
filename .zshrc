@@ -34,6 +34,11 @@ alias rzshrc="dotfiles_sync"
 z() { if [ $# -eq 0 ]; then zshrc; else open -a /Applications/Zed.app "$@"; fi }
 alias rz=rzshrc
 alias zr=rzshrc
+claude() {
+  trap 'printf "\033]1337;SetColors=bg=1a1a1a\007" > /dev/tty 2>/dev/null' EXIT
+  printf '\033]1337;SetColors=bg=2d2d3d\007' > /dev/tty 2>/dev/null
+  command claude "$@"
+}
 cc() {
   if [ $# -eq 0 ]; then
     claude
