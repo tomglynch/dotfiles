@@ -88,8 +88,19 @@ _ensure_docker() {
   fi
 }
 
+# Verify gcloud application-default credentials are valid (and refreshable),
+# re-authing in-place if not. Unlike glogin, this never exits the window.
+_ensure_gcloud() {
+  if ! gcloud auth application-default print-access-token &>/dev/null; then
+    echo "gcloud ADC expired or missing — re-authenticating..."
+    gcloud auth application-default login && \
+      gcloud auth application-default set-quota-project toocan-dev
+  fi
+}
+
 dcu() {
   _ensure_docker
+  _ensure_gcloud
   printf '\033]11;rgb:00/3f/8a\a'  # Docker blue background
   docker compose up "$@"
   printf '\033]111;\a'              # Restore default background
@@ -97,6 +108,7 @@ dcu() {
 
 dcus() {
   _ensure_docker
+  _ensure_gcloud
   printf '\033]11;rgb:00/3f/8a\a'
   docker compose --profile sdk-test up "$@"
   printf '\033]111;\a'
@@ -228,7 +240,7 @@ if [ -f '/Users/tlynch/Downloads/google-cloud-sdk/completion.zsh.inc' ]; then . 
 # Functions
 wt() {
   if [ -z "$1" ]; then
-    cd ~/worktrees-qz/toocan-app && ls -t
+    cd ~/worktrees-qz/toocan-app && ls -t | head -15
   else
     local matches=("${(@f)$(find ~/worktrees-qz/toocan-app -maxdepth 1 -type d -name "*$1*")}")
     if [ ${#matches[@]} -eq 0 ]; then
@@ -316,3 +328,8 @@ case ":$PATH:" in
   *) export PATH="$PNPM_HOME:$PATH" ;;
 esac
 # pnpm end
+
+# Added by LM Studio CLI (lms)
+export PATH="$PATH:/Users/tlynch/.lmstudio/bin"
+# End of LM Studio CLI section
+
