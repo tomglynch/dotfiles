@@ -333,3 +333,7 @@ esac
 export PATH="$PATH:/Users/tlynch/.lmstudio/bin"
 # End of LM Studio CLI section
 
+
+# Set window + tab title; resumes a suspended job (e.g. Claude) afterward.
+# Usage: Ctrl+Z, then `title cat and dog`  (no quotes needed)
+title() { printf '\e]0;%s\a' "$*"; fg 2>/dev/null }
