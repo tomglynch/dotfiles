@@ -318,6 +318,11 @@ caf() {
   caffeinate -dimsu -t $((mins * 60))
 }
 
+# Open a prod-Firestore-write window for N minutes (caffeinates + auto-reverts the deny tripwire).
+#   qz-prod-write 30            # 30 min prod write + caffeinated, then auto re-arm
+#   qz-prod-write --rearm-now   # panic button if a crash left access open
+qz-prod-write() { ~/qz/scripts/qz-prod-write.sh "$@" }
+
 # Added by Antigravity
 export PATH="/Users/tomlynchdj/.antigravity/antigravity/bin:$PATH"
 
