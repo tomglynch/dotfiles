@@ -98,22 +98,98 @@ _ensure_gcloud() {
   fi
 }
 
+# toocan-app pins `name: qz` in docker-compose.yaml, so EVERY worktree is the same compose
+# project. Running up from a second worktree recreates the first one's containers keeping its
+# bind mounts — which looks like "certs/ is missing" and 502s from client-proxy. Bail instead.
+_ensure_not_hijacking() {
+  local cid=$(docker compose ps -aq 2>/dev/null | head -1)
+  [[ -z $cid ]] && return 0
+  local wd=$(docker inspect -f \
+    '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$cid" 2>/dev/null)
+  [[ -z $wd || $wd == $PWD ]] && return 0
+  echo "This compose project is already running from: ${wd/#$HOME/~}"
+  echo "Run 'dcd' there (or here — same project) before starting it from ${PWD/#$HOME/~}."
+  return 1
+}
+
+# The https profile mounts ./certs, which is gitignored and therefore per-worktree. The mkcert CA
+# is already installed and trusted, so re-issuing a leaf takes a second and needs no sudo.
+_ensure_certs() {
+  [[ -f certs/dev-cert.pem && -f certs/dev-key.pem ]] && return 0
+  if ! command -v mkcert &>/dev/null; then
+    echo "mkcert not installed — 'brew install mkcert && mkcert -install' for https."
+    return 1
+  fi
+  echo "Issuing dev certs for *.qz.test in ${PWD/#$HOME/~}/certs ..."
+  mkdir -p certs && mkcert -cert-file certs/dev-cert.pem -key-file certs/dev-key.pem \
+    client.qz.test client-alt.qz.test api.qz.test
+}
+
+# Only ask for profiles this compose file actually declares, so dcu stays usable in other repos
+# and on branches predating them. One-offs: QZ_DC_PROFILES="https sdk-test" dcu
+_dc_profiles() {
+  local want=(${=QZ_DC_PROFILES:-https sdk-example}) have p out=()
+  have=(${(f)"$(docker compose config --profiles 2>/dev/null)"})
+  for p in $want; do (( ${have[(Ie)$p]} )) && out+=(--profile $p); done
+  print -r -- $out
+}
+
+# The host ports are fixed in the compose file, so a stack started under an explicit -p (qz2499
+# et al) still owns them while being a different project — invisible to the check above, even
+# when launched from this very directory. Anything holding them that isn't ours is a clash.
+_port_clashes() {
+  local mine
+  mine=$(docker compose ps -aq 2>/dev/null) || return 0
+  docker ps --format '{{.ID}}|{{.Names}}|{{.Ports}}|{{.Label "com.docker.compose.project"}}' \
+    2>/dev/null | while IFS='|' read -r id name ports proj; do
+      [[ $ports == *:443-\>* || $ports == *:5173-\>* || $ports == *:8765-\>* ]] || continue
+      [[ -n $mine && $mine == *$id* ]] && continue
+      echo "  $name — project '${proj:-none}'"
+    done
+}
+
 dcu() {
   _ensure_docker
   _ensure_gcloud
+  _ensure_not_hijacking || return 1
+
+  local clashes=$(_port_clashes)
+  if [[ -n $clashes ]]; then
+    echo "443/5173/8765 are held by containers from elsewhere:"
+    echo "${clashes//$HOME/~}"
+    echo "Stop them first (docker compose -p <project> down)."
+    return 1
+  fi
+
+  local profiles=(${=$(_dc_profiles)})
+  if (( ${profiles[(Ie)https]} )); then
+    _ensure_certs || return 1
+    grep -q client-alt.qz.test /etc/hosts || echo "/etc/hosts is missing the .test names — \
+sudo sh -c 'echo \"127.0.0.1 client.qz.test client-alt.qz.test api.qz.test\" >> /etc/hosts'"
+  fi
+  # sdk-example serves client-alt.qz.test from dist/, not src/ — a stale dist is a silent wrong test.
+  if (( ${profiles[(Ie)sdk-example]} )) && [[ ! -d packages/sdk/dist ]]; then
+    echo "packages/sdk/dist missing — 'pnpm --dir packages/sdk build' or client-alt.qz.test breaks."
+  fi
+
   printf '\033]11;rgb:00/3f/8a\a'  # Docker blue background
-  docker compose up "$@"
+  docker compose $profiles up "$@"
   printf '\033]111;\a'              # Restore default background
 }
 
-dcus() {
-  _ensure_docker
-  _ensure_gcloud
-  printf '\033]11;rgb:00/3f/8a\a'
-  docker compose --profile sdk-test up "$@"
-  printf '\033]111;\a'
+# `down` ignores services behind a profile, which used to leave client-proxy up holding 443 (and
+# the network) after a "successful" teardown. Enable every declared profile so down means down.
+dcd() {
+  local cid=$(docker compose ps -aq 2>/dev/null | head -1)
+  if [[ -n $cid ]]; then
+    local wd=$(docker inspect -f \
+      '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$cid" 2>/dev/null)
+    [[ -n $wd && $wd != $PWD ]] && echo "Tearing down the stack from ${wd/#$HOME/~}"
+  fi
+  local p flags=()
+  for p in ${(f)"$(docker compose config --profiles 2>/dev/null)"}; do flags+=(--profile $p); done
+  docker compose $flags down --remove-orphans "$@"
 }
-alias dcd="docker compose down"
 alias up="docker compose run --rm client pnpm install && docker compose up"
 
 alias tc="cd ~/qz/toocan-app"
@@ -238,44 +314,78 @@ if [ -f '/Users/tlynch/Downloads/google-cloud-sdk/path.zsh.inc' ]; then . '/User
 if [ -f '/Users/tlynch/Downloads/google-cloud-sdk/completion.zsh.inc' ]; then . '/Users/tlynch/Downloads/google-cloud-sdk/completion.zsh.inc'; fi
 
 # Functions
-wt() {
-  if [ -z "$1" ]; then
-    cd ~/worktrees-qz/toocan-app && ls -t | head -15
-  else
-    local matches=("${(@f)$(find ~/worktrees-qz/toocan-app -maxdepth 1 -type d -name "*$1*")}")
-    if [ ${#matches[@]} -eq 0 ]; then
-      echo "No worktree matching '$1'"
-    elif [ ${#matches[@]} -eq 1 ]; then
-      cd "${matches[1]}"
-    else
-      echo "Multiple matches:"
-      local i=1
-      for m in "${matches[@]}"; do echo "  $i) ${m##*/}"; ((i++)); done
-      echo -n "Pick [1-${#matches[@]}]: "; read choice
-      cd "${matches[$choice]}"
-    fi
+# Fuzzy-match one worktree directory. Echoes its path; message on stderr if it can't.
+# Shared by `wt`, `wt rm` and `wtt` so the three cannot drift apart.
+_wt_match() {
+  local root=~/worktrees-qz/toocan-app
+  local matches=("${(@f)$(find $root -mindepth 1 -maxdepth 1 -type d -name "*$1*")}")
+  if [ ${#matches[@]} -eq 0 ] || [ -z "${matches[1]}" ]; then
+    print -u2 "No worktree matching '$1'"; return 1
+  elif [ ${#matches[@]} -eq 1 ]; then
+    print -r -- "${matches[1]}"; return 0
   fi
+  # An exact directory name wins outright, or `wt foo` can never reach foo when foo-bar exists.
+  local m
+  for m in "${matches[@]}"; do
+    [ "${m##*/}" = "$1" ] && { print -r -- "$m"; return 0 }
+  done
+  print -u2 "Multiple matches:"
+  local i=1
+  for m in "${matches[@]}"; do print -u2 "  $i) ${m##*/}"; ((i++)); done
+  print -n -u2 "Pick [1-${#matches[@]}]: "; local choice; read choice
+  [ -n "${matches[$choice]}" ] || return 1
+  print -r -- "${matches[$choice]}"
 }
 
+# wt                    list worktrees, newest first
+# wt <string>           cd to the matching worktree
+# wt add <pr|branch>    create one — a PR number, someone's branch, or a new branch
+# wt pr <number>        same as `wt add <number>`, reads better
+# wt rm <string>        remove a worktree and release its ports
+# wt st                 status of all worktrees
+# Mutations need a verb on purpose: a bare argument must never be able to create anything,
+# or a typo while navigating would install dependencies and open a terminal.
+wt() {
+  local S=~/.claude/skills/worktree-manager/scripts
+  case "$1" in
+    "")
+      cd ~/worktrees-qz/toocan-app && ls -t | head -15
+      ;;
+    add|pr)
+      shift
+      # Stream progress live (dependency installs are slow) while still capturing the final path,
+      # so this can cd you into the new worktree.
+      local log=$(mktemp)
+      "$S/wtadd.sh" "$@" 2>&1 | tee "$log"
+      local rc=$pipestatus[1]
+      local target=$(sed -n 's/^  Path:  *//p' "$log" | tail -1)
+      rm -f "$log"
+      [ $rc -eq 0 ] || return $rc
+      [[ -n "$target" && -d "$target" ]] && cd "$target"
+      ;;
+    rm)
+      shift
+      local target; target=$(_wt_match "$1") || return 1
+      local branch=$(git -C "$target" branch --show-current 2>/dev/null)
+      [ -n "$branch" ] || { print -u2 "wt rm: could not read a branch in $target"; return 1; }
+      shift
+      "$S/cleanup.sh" "${${target:h}:t}" "$branch" "$@"
+      ;;
+    st|status)
+      shift; "$S/status.sh" "$@"
+      ;;
+    *)
+      local target; target=$(_wt_match "$1") && cd "$target"
+      ;;
+  esac
+}
+
+# Launch a Claude agent in an existing worktree.
 wtt() {
-  local target
   if [ -z "$1" ]; then
-    echo "Usage: wtt <worktree-name>"
-    echo "Worktrees:"; ls ~/worktrees-qz/toocan-app
-    return 1
+    print "Usage: wtt <worktree-name>"; print "Worktrees:"; ls ~/worktrees-qz/toocan-app; return 1
   fi
-  local matches=("${(@f)$(find ~/worktrees-qz/toocan-app -maxdepth 1 -type d -name "*$1*")}")
-  if [ ${#matches[@]} -eq 0 ]; then
-    echo "No worktree matching '$1'"; return 1
-  elif [ ${#matches[@]} -eq 1 ]; then
-    target="${matches[1]}"
-  else
-    echo "Multiple matches:"
-    local i=1
-    for m in "${matches[@]}"; do echo "  $i) ${m##*/}"; ((i++)); done
-    echo -n "Pick [1-${#matches[@]}]: "; read choice
-    target="${matches[$choice]}"
-  fi
+  local target; target=$(_wt_match "$1") || return 1
   ~/.claude/skills/worktree-manager/scripts/launch-agent.sh "$target"
 }
 
