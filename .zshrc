@@ -98,18 +98,37 @@ _ensure_gcloud() {
   fi
 }
 
-# toocan-app pins `name: qz` in docker-compose.yaml, so EVERY worktree is the same compose
-# project. Running up from a second worktree recreates the first one's containers keeping its
-# bind mounts — which looks like "certs/ is missing" and 502s from client-proxy. Bail instead.
+# `down` ignores services behind a profile, which used to leave client-proxy up holding 443 (and
+# the network) after a "successful" teardown. Enable every declared profile so down means down.
+_dc_down() {
+  local p flags=()
+  for p in ${(f)"$(docker compose config --profiles 2>/dev/null)"}; do flags+=(--profile $p); done
+  docker compose $flags down --remove-orphans "$@"
+}
+
+# toocan-app pins `name: qz` in docker-compose.yaml, so EVERY worktree is the same compose project
+# and `ps -aq` here also sees a stack created elsewhere. Coming up on top of another worktree's
+# containers reuses its bind mounts — which looks like "certs/ is missing" and 502s from
+# client-proxy. Ctrl-C only stops containers, so stopped leftovers are the normal case: clear them
+# and rebuild from here. Anything still alive belongs to another window, so bail instead.
 _ensure_not_hijacking() {
   local cid=$(docker compose ps -aq 2>/dev/null | head -1)
   [[ -z $cid ]] && return 0
   local wd=$(docker inspect -f \
     '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$cid" 2>/dev/null)
   [[ -z $wd || $wd == $PWD ]] && return 0
-  echo "This compose project is already running from: ${wd/#$HOME/~}"
-  echo "Run 'dcd' there (or here — same project) before starting it from ${PWD/#$HOME/~}."
-  return 1
+
+  local live
+  live=$(docker compose ps -q --status running --status restarting --status paused 2>/dev/null)
+  if [[ -n $live ]]; then
+    echo "This compose project is already running from: ${wd/#$HOME/~}"
+    echo "Run 'dcd' there (or here — same project) before starting it from ${PWD/#$HOME/~}."
+    return 1
+  fi
+
+  echo "Clearing the stopped stack from ${wd/#$HOME/~} (named volumes kept) ..."
+  local out
+  out=$(_dc_down 2>&1) || { echo $out; return 1; }
 }
 
 # The https profile mounts ./certs, which is gitignored and therefore per-worktree. The mkcert CA
@@ -177,8 +196,6 @@ sudo sh -c 'echo \"127.0.0.1 client.qz.test client-alt.qz.test api.qz.test\" >> 
   printf '\033]111;\a'              # Restore default background
 }
 
-# `down` ignores services behind a profile, which used to leave client-proxy up holding 443 (and
-# the network) after a "successful" teardown. Enable every declared profile so down means down.
 dcd() {
   local cid=$(docker compose ps -aq 2>/dev/null | head -1)
   if [[ -n $cid ]]; then
@@ -186,9 +203,7 @@ dcd() {
       '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$cid" 2>/dev/null)
     [[ -n $wd && $wd != $PWD ]] && echo "Tearing down the stack from ${wd/#$HOME/~}"
   fi
-  local p flags=()
-  for p in ${(f)"$(docker compose config --profiles 2>/dev/null)"}; do flags+=(--profile $p); done
-  docker compose $flags down --remove-orphans "$@"
+  _dc_down "$@"
 }
 alias up="docker compose run --rm client pnpm install && docker compose up"
 
@@ -203,6 +218,12 @@ alias kctx="kubectx"
 alias kc="kubectx"
 alias kcs="kubectx staging"
 alias kcp="kubectx prod"
+
+# k8s-apps qz cli — subshell so your cwd is unchanged when they exit
+qzms() { (cd ~/qz/k8s-apps && uv run qz monitor staging "$@") }
+qzmp() { (cd ~/qz/k8s-apps && uv run qz monitor prod "$@") }
+qzd() { (cd ~/qz/k8s-apps && uv run qz deploy "$@") }
+
 alias l="date && echo"
 alias kar="k argo rollouts get rollout toocan-call-server"
 alias kpodloop="while true; do k get pods; sleep 15;"
@@ -452,3 +473,6 @@ export PATH="$PATH:/Users/tlynch/.lmstudio/bin"
 # Set window + tab title; resumes a suspended job (e.g. Claude) afterward.
 # Usage: Ctrl+Z, then `title cat and dog`  (no quotes needed)
 title() { printf '\e]0;%s\a' "$*"; fg 2>/dev/null }
+
+# opencode
+export PATH=/Users/tlynch/.opencode/bin:$PATH
