@@ -205,6 +205,12 @@ dcd() {
   fi
   _dc_down "$@"
 }
+# Restart: args go to `up`, since that's the side you tend to flag (--build, a service name).
+dcr() {
+  dcd || return 1
+  dcu "$@"
+}
+
 alias up="docker compose run --rm client pnpm install && docker compose up"
 
 alias tc="cd ~/qz/toocan-app"
