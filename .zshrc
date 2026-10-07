@@ -50,6 +50,18 @@ cc() {
   fi
 }
 alias ccr="~/.claude/scripts/ccr.sh"
+# cd to the newest Claude scratchpad for this dir (or its git root, if launched there)
+scratch() {
+  local d
+  for d in "$PWD" "$(git rev-parse --show-toplevel 2>/dev/null)"; do
+    [[ -z $d ]] && continue
+    local hits=(/private/tmp/claude-$UID/${d//[\/.]/-}/*/scratchpad(N/om))
+    (( $#hits )) && { cd "$hits[1]"; return; }
+  done
+  echo "no scratchpad for $PWD" >&2; return 1
+}
+alias pad="scratch"
+alias cdscratch="scratch"
 alias gs="git status"
 alias gco="git checkout"
 alias gc="git commit"
@@ -105,6 +117,14 @@ _dc_down() {
   local p flags=()
   for p in ${(f)"$(docker compose config --profiles 2>/dev/null)"}; do flags+=(--profile $p); done
   docker compose $flags down --remove-orphans "$@"
+}
+
+# Layers ~/.config/qz/compose.local.yaml (your proxy on 127.0.0.1:443) onto toocan-app on any
+# branch, leaving 127.0.0.2:443 for the loop's stack. Skipped in repos without a client-proxy.
+_dc_files() {
+  local o=~/.config/qz/compose.local.yaml
+  [[ -f $o ]] && docker compose config --services 2>/dev/null | grep -qx client-proxy \
+    && print -r -- -f docker-compose.yaml -f $o
 }
 
 # toocan-app pins `name: qz` in docker-compose.yaml, so EVERY worktree is the same compose project
@@ -164,6 +184,7 @@ _port_clashes() {
     2>/dev/null | while IFS='|' read -r id name ports proj; do
       [[ $ports == *:443-\>* || $ports == *:5173-\>* || $ports == *:8765-\>* ]] || continue
       [[ -n $mine && $mine == *$id* ]] && continue
+      [[ $proj == qz-loop ]] && continue  # the loop's stack, on 127.0.0.2 and its own ports
       echo "  $name — project '${proj:-none}'"
     done
 }
@@ -192,8 +213,9 @@ sudo sh -c 'echo \"127.0.0.1 client.qz.test client-alt.qz.test api.qz.test\" >> 
     echo "packages/sdk/dist missing — 'pnpm --dir packages/sdk build' or client-alt.qz.test breaks."
   fi
 
+  local files=(${=$(_dc_files)})
   printf '\033]11;rgb:00/3f/8a\a'  # Docker blue background
-  docker compose $profiles up "$@"
+  docker compose $files $profiles up "$@"
   printf '\033]111;\a'              # Restore default background
 }
 
