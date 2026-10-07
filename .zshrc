@@ -9,6 +9,7 @@ if [[ -d "$HOME/dotfiles/.git" && -o interactive ]]; then
 fi
 
 alias c="claude"
+alias occ="ollama launch claude --model qwen3.6:27b"
 
 #General
 alias python2="\python"
