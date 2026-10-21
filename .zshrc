@@ -334,6 +334,9 @@ lighten() {
 }
 alias lighter=lighten
 
+# Reset iTerm background to black after an app leaves it tinted
+alias black="printf '\e]11;#000000\a'"
+
 # Source secrets (API tokens etc.) — not tracked in dotfiles
 [[ -f ~/.secrets ]] && source ~/.secrets
 
@@ -423,6 +426,15 @@ wt() {
       ;;
     st|status)
       shift; "$S/status.sh" "$@"
+      ;;
+    open)
+      # Like wtt, but keeps the iTerm2 tab colour wt add gave the worktree (stored in its VS Code settings).
+      shift
+      local target; target=$(_wt_match "$1") || return 1
+      local colour=$(jq -r '."workbench.colorCustomizations"."titleBar.activeBackground" // empty' \
+        "$target/.vscode/settings.json" 2>/dev/null)
+      local args=(); [ -n "$colour" ] && args=(--color "$colour")
+      "$S/launch-agent.sh" "${args[@]}" "$target"
       ;;
     *)
       local target; target=$(_wt_match "$1") && cd "$target"
