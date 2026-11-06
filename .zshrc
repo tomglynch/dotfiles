@@ -36,10 +36,13 @@ z() { if [ $# -eq 0 ]; then zshrc; else open -a /Applications/Zed.app "$@"; fi }
 alias rz=rzshrc
 alias zr=rzshrc
 claude() {
-  trap 'printf "\033]1337;SetColors=bg=1a1a1a\007" > /dev/tty 2>/dev/null' EXIT
   printf '\033]1337;SetColors=bg=2d2d3d\007' > /dev/tty 2>/dev/null
   command claude "$@"
 }
+# Reset at every prompt rather than on claude's exit, so no exit path can leave it navy
+_reset_bg() { printf '\033]1337;SetColors=bg=000000\007' > /dev/tty 2>/dev/null }
+precmd_functions+=(_reset_bg)
+alias black=_reset_bg
 cc() {
   if [ $# -eq 0 ]; then
     claude
@@ -240,13 +243,13 @@ alias tc="cd ~/qz/toocan-app"
 alias tccc="cd ~/qz/toocan-app && cc"
 alias k8s="cd ~/qz/k8s-apps"
 alias k8="cd ~/qz/k8s-apps"
-alias qz="cd ~/qz && ls"
 alias qzcc="cd ~/qz && cc"
 alias k="kubectl"
 alias kctx="kubectx"
 alias kc="kubectx"
 alias kcs="kubectx staging"
 alias kcp="kubectx prod"
+alias kcd="kubectx dev"
 
 # k8s-apps qz cli — subshell so your cwd is unchanged when they exit
 qzms() { (cd ~/qz/k8s-apps && uv run qz monitor staging "$@") }
@@ -333,9 +336,6 @@ lighten() {
   echo "$hex → $new"
 }
 alias lighter=lighten
-
-# Reset iTerm background to black after an app leaves it tinted
-alias black="printf '\e]11;#000000\a'"
 
 # Source secrets (API tokens etc.) — not tracked in dotfiles
 [[ -f ~/.secrets ]] && source ~/.secrets
