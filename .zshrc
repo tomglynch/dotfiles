@@ -122,9 +122,23 @@ _dc_down() {
   docker compose $flags down --remove-orphans "$@"
 }
 
+# `dcu 3` / `dcd 3` / `dcr 3` run another stack from this worktree: project qz3 on 127.0.0.3, at
+# https://app-3.qz.test etc (~/.config/qz/compose.slot.yaml). Plain dcu is slot 1. The env vars do
+# all the work, so the helpers below run unchanged against a slot. `qz-stacks` shows who has what.
+_dc_slot() {
+  local -x QZ_SLOT=$1 COMPOSE_PROJECT_NAME=qz$1 \
+    COMPOSE_FILE=docker-compose.yaml:$HOME/.config/qz/compose.slot.yaml \
+    MANAGE_PORT=$((8765 + 100 * $1)) CLIENT_PORT=$((5173 + 100 * $1)) \
+    SERVER_HOST=https://api-$1.qz.test
+  shift
+  "$@"
+}
+
 # Layers ~/.config/qz/compose.local.yaml (your proxy on 127.0.0.1:443) onto toocan-app on any
-# branch, leaving 127.0.0.2:443 for the loop's stack. Skipped in repos without a client-proxy.
+# branch, leaving 127.0.0.2-4 for slots. Skipped in repos without a client-proxy, and in a slot,
+# where explicit -f would override COMPOSE_FILE.
 _dc_files() {
+  [[ -n $QZ_SLOT ]] && return
   local o=~/.config/qz/compose.local.yaml
   [[ -f $o ]] && docker compose config --services 2>/dev/null | grep -qx client-proxy \
     && print -r -- -f docker-compose.yaml -f $o
@@ -146,7 +160,7 @@ _ensure_not_hijacking() {
   live=$(docker compose ps -q --status running --status restarting --status paused 2>/dev/null)
   if [[ -n $live ]]; then
     echo "This compose project is already running from: ${wd/#$HOME/~}"
-    echo "Run 'dcd' there (or here — same project) before starting it from ${PWD/#$HOME/~}."
+    echo "Run 'dcd${QZ_SLOT:+ $QZ_SLOT}' there (or here — same project) before starting it from ${PWD/#$HOME/~}."
     return 1
   fi
 
@@ -187,13 +201,28 @@ _port_clashes() {
     2>/dev/null | while IFS='|' read -r id name ports proj; do
       [[ $ports == *:443-\>* || $ports == *:5173-\>* || $ports == *:8765-\>* ]] || continue
       [[ -n $mine && $mine == *$id* ]] && continue
-      [[ $proj == qz-loop ]] && continue  # the loop's stack, on 127.0.0.2 and its own ports
+      # Slots and the loop each have their own IP and ports.
+      [[ $proj == (qz|qz-loop|qz[2-4]) ]] && continue
       echo "  $name — project '${proj:-none}'"
     done
 }
 
 dcu() {
+  [[ -z $QZ_SLOT && $1 == [2-4] ]] && { _dc_slot $1 dcu "${@:2}"; return; }
   _ensure_docker
+  if [[ -n $QZ_SLOT ]]; then
+    local n=$QZ_SLOT
+    # The alias is lost on reboot.
+    if ! ifconfig lo0 | grep -q "inet 127.0.0.$n "; then
+      echo "127.0.0.$n isn't set up. Run: sudo ifconfig lo0 alias 127.0.0.$n up"
+      return 1
+    fi
+    if ! grep -q "app-$n.qz.test" /etc/hosts; then
+      echo "/etc/hosts is missing slot $n. Run: sudo sh -c \
+'echo \"127.0.0.$n app-$n.qz.test sdk-$n.qz.test customer-$n.qz.test api-$n.qz.test\" >> /etc/hosts'"
+      return 1
+    fi
+  fi
   _ensure_gcloud
   _ensure_not_hijacking || return 1
 
@@ -223,6 +252,8 @@ sudo sh -c 'echo \"127.0.0.1 client.qz.test client-alt.qz.test api.qz.test\" >> 
 }
 
 dcd() {
+  [[ -z $QZ_SLOT && $1 == [2-4] ]] && { _dc_slot $1 dcd "${@:2}"; return; }
+  _ensure_docker
   local cid=$(docker compose ps -aq 2>/dev/null | head -1)
   if [[ -n $cid ]]; then
     local wd=$(docker inspect -f \
@@ -233,6 +264,7 @@ dcd() {
 }
 # Restart: args go to `up`, since that's the side you tend to flag (--build, a service name).
 dcr() {
+  [[ -z $QZ_SLOT && $1 == [2-4] ]] && { _dc_slot $1 dcr "${@:2}"; return; }
   dcd || return 1
   dcu "$@"
 }
