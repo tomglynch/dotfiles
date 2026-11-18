@@ -22,8 +22,10 @@ _session_cmd_counter() { (( _SESSION_CMD_COUNT++ )) }
 preexec_functions+=(_session_cmd_counter)
 
 glogin() {
-  gcloud auth application-default login && gcloud auth application-default set-quota-project toocan-dev
-  if [[ $_SESSION_CMD_COUNT -le 1 ]]; then
+  # --update-adc refreshes user creds and ADC in one browser flow
+  gcloud auth login --update-adc && gcloud auth application-default set-quota-project toocan-dev
+  # Only close fresh interactive windows; Claude's shell has no preexec, so the count stays 0
+  if [[ -o interactive && $_SESSION_CMD_COUNT -le 1 ]]; then
     exit
   fi
 }
@@ -104,14 +106,36 @@ _ensure_docker() {
   fi
 }
 
-# Verify gcloud application-default credentials are valid (and refreshable),
+# Firebase CLI is logged out on purpose so it falls back to gcloud ADC;
+# ADC needs an explicit quota project for firebase.googleapis.com.
+export GOOGLE_CLOUD_QUOTA_PROJECT=toocan-dev
+
+# Verify gcloud user creds and ADC are valid (and refreshable),
 # re-authing in-place if not. Unlike glogin, this never exits the window.
 _ensure_gcloud() {
-  if ! gcloud auth application-default print-access-token &>/dev/null; then
-    echo "gcloud ADC expired or missing — re-authenticating..."
-    gcloud auth application-default login && \
+  if ! { gcloud auth print-access-token &>/dev/null && \
+         gcloud auth application-default print-access-token &>/dev/null; }; then
+    echo "gcloud: expired, re-authenticating..."
+    gcloud auth login --update-adc && \
       gcloud auth application-default set-quota-project toocan-dev
   fi
+}
+
+# Morning login: re-auth only what's expired or about to be.
+loginall() {
+  _ensure_gcloud
+
+  local ts_expiry ts_state soon
+  ts_state=$(tailscale status --json 2>/dev/null | jq -r .BackendState)
+  ts_expiry=$(tailscale status --json 2>/dev/null | jq -r '.Self.KeyExpiry // empty')
+  soon=$(date -u -v+1d +%Y-%m-%dT%H:%M:%SZ)
+  if [[ $ts_state != Running || ( -n $ts_expiry && $ts_expiry < $soon ) ]]; then
+    echo "tailscale: $ts_state, key expires ${ts_expiry:-n/a}, logging in..."
+    tailscale login
+  fi
+
+  gh auth status &>/dev/null || { echo "gh: logged out..."; gh auth login; }
+  echo "loginall: done"
 }
 
 # `down` ignores services behind a profile, which used to leave client-proxy up holding 443 (and
@@ -122,7 +146,7 @@ _dc_down() {
   docker compose $flags down --remove-orphans "$@"
 }
 
-# `dcu 3` / `dcd 3` / `dcr 3` run another stack from this worktree: project qz3 on 127.0.0.3, at
+# `dcu-3` / `dcd-3` / `dcr-3` run another stack from this worktree: project qz3 on 127.0.0.3, at
 # https://app-3.qz.test etc (~/.config/qz/compose.slot.yaml). Plain dcu is slot 1. The env vars do
 # all the work, so the helpers below run unchanged against a slot. `qz-stacks` shows who has what.
 _dc_slot() {
@@ -160,7 +184,7 @@ _ensure_not_hijacking() {
   live=$(docker compose ps -q --status running --status restarting --status paused 2>/dev/null)
   if [[ -n $live ]]; then
     echo "This compose project is already running from: ${wd/#$HOME/~}"
-    echo "Run 'dcd${QZ_SLOT:+ $QZ_SLOT}' there (or here — same project) before starting it from ${PWD/#$HOME/~}."
+    echo "Run 'dcd${QZ_SLOT:+-$QZ_SLOT}' there (or here — same project) before starting it from ${PWD/#$HOME/~}."
     return 1
   fi
 
@@ -247,8 +271,12 @@ sudo sh -c 'echo \"127.0.0.1 client.qz.test client-alt.qz.test api.qz.test\" >> 
 
   local files=(${=$(_dc_files)})
   printf '\033]11;rgb:00/3f/8a\a'  # Docker blue background
+  # iTerm badge pinned to the pane, so the slot stays visible while logs scroll.
+  local badge="slot ${QZ_SLOT:-1}"$'\n'"app${QZ_SLOT:+-$QZ_SLOT}.qz.test"
+  printf '\033]1337;SetBadgeFormat=%s\a' "$(print -rn -- $badge | base64)"
   docker compose $files $profiles up "$@"
   printf '\033]111;\a'              # Restore default background
+  printf '\033]1337;SetBadgeFormat=\a'
 }
 
 dcd() {
@@ -268,6 +296,7 @@ dcr() {
   dcd || return 1
   dcu "$@"
 }
+for n in 2 3 4; do alias dcu-$n="dcu $n" dcd-$n="dcd $n" dcr-$n="dcr $n"; done; unset n
 
 alias up="docker compose run --rm client pnpm install && docker compose up"
 
